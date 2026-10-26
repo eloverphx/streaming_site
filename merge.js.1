@@ -1,0 +1,238 @@
+// merge.js
+import express from "express";
+import fs from "fs/promises";
+import fsSync from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import ffmpeg from "fluent-ffmpeg";
+import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
+const router = express.Router();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const VIDEOS_DIR = path.join(__dirname, "public", "videos");
+const THUMB_DIR = path.join(__dirname, "public", "thumbnails");
+
+/**
+ * Generate thumbnail for a video file
+ */
+async function generateThumbnail(videoPath, outputPath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(videoPath)
+      .screenshots({
+        timestamps: ['10%'],
+        filename: path.basename(outputPath),
+        folder: path.dirname(outputPath),
+        size: '1280x720'
+      })
+      .on('end', () => {
+        console.log(`✅ Thumbnail generated: ${outputPath}`);
+        resolve();
+      })
+      .on('error', (err) => {
+        console.error(`❌ Thumbnail generation failed: ${err.message}`);
+        reject(err);
+      });
+  });
+}
+
+/**
+ * POST /api/admin/merge
+ * Body: { 
+ *   files: string[], 
+ *   outputName?: string,
+ *   deleteOriginals?: boolean,
+ *   generateThumb?: boolean
+ * }
+ *
+ * Example:
+ *  { 
+ *    "files": ["2025-01-01T10-00-00.mp4", "2025-01-01T10-15-00.mp4"], 
+ *    "outputName": "2025-01-01-merged",
+ *    "deleteOriginals": true,
+ *    "generateThumb": true
+ *  }
+ *
+ * Returns: { success: true, mergedFilename, mergedPath, url, thumbnailGenerated, deletedFiles }
+ */
+router.post("/api/admin/merge", async (req, res) => {
+  const listFilePath = null;
+  let tempListFile = null;
+
+  try {
+    const { files, outputName, deleteOriginals = false, generateThumb = true } = req.body || {};
+
+    // Emit progress via Socket.IO if available
+    const io = global.__io;
+    const emitProgress = (stage, message, progress = 0) => {
+      if (io) {
+        io.emit('merge:progress', { stage, message, progress });
+      }
+      console.log(`[MERGE] ${stage}: ${message} (${progress}%)`);
+    };
+
+    if (!Array.isArray(files) || files.length < 2) {
+      return res.status(400).json({
+        success: false,
+        error: "Provide at least two files to merge (array of filenames)."
+      });
+    }
+
+    emitProgress('validation', 'Validating files...', 5);
+
+    // Basic validation – only allow .mp4 in VIDEOS_DIR
+    const safeFiles = files.map(f => path.basename(f)); // strip any path
+    if (!safeFiles.every(f => f.endsWith(".mp4"))) {
+      return res.status(400).json({
+        success: false,
+        error: "All files must be .mp4"
+      });
+    }
+
+    // Ensure all files exist
+    for (const f of safeFiles) {
+      const fullPath = path.join(VIDEOS_DIR, f);
+      if (!fsSync.existsSync(fullPath)) {
+        return res.status(404).json({
+          success: false,
+          error: `File not found: ${f}`
+        });
+      }
+    }
+
+    emitProgress('preparation', 'Preparing merge...', 15);
+
+    // Output name – defaults to timestamp if not provided
+    const baseName =
+      (outputName || `merged-${Date.now()}`).replace(/[^a-zA-Z0-9-_]/g, "_") +
+      ".mp4";
+    const outputPath = path.join(VIDEOS_DIR, baseName);
+
+    // Create a temporary "list file" for ffmpeg concat demuxer
+    tempListFile = path.join(
+      VIDEOS_DIR,
+      `.merge-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`
+    );
+
+    const listFileContent = safeFiles
+      .map(f => `file '${path.join(VIDEOS_DIR, f).replace(/'/g, "'\\''")}'`)
+      .join("\n");
+
+    await fs.writeFile(tempListFile, listFileContent, "utf8");
+
+    emitProgress('merging', 'Merging video files...', 30);
+
+    // Run ffmpeg concat with progress tracking
+await new Promise((resolve, reject) => {
+  const command = ffmpeg()
+    .input(tempListFile)
+    .inputOptions(["-f concat", "-safe 0"])
+    .outputOptions([
+      "-c copy",
+      "-movflags", "+faststart"  // ← Add this
+    ])
+    .on("error", err => {
+      console.error("❌ ffmpeg merge error:", err);
+      reject(err);
+    })
+    .on("progress", (progress) => {
+      if (progress.percent) {
+        const mergeProgress = Math.min(30 + (progress.percent * 0.5), 80);
+        emitProgress('merging', `Merging: ${Math.round(progress.percent)}%`, mergeProgress);
+      }
+    })
+    .on("end", () => {
+      console.log("✅ Merge completed:", outputPath);
+      emitProgress('merging', 'Merge complete!', 80);
+      resolve();
+    })
+    .save(outputPath);
+});
+
+    // Clean up list file
+    await fs.unlink(tempListFile).catch(() => {});
+    tempListFile = null;
+
+    let thumbnailGenerated = false;
+    let deletedFiles = [];
+
+    // Generate thumbnail if requested
+    if (generateThumb) {
+      try {
+        emitProgress('thumbnail', 'Generating thumbnail...', 85);
+        const thumbBasename = path.parse(baseName).name;
+        const thumbPath = path.join(THUMB_DIR, `${thumbBasename}.jpg`);
+        
+        await generateThumbnail(outputPath, thumbPath);
+        thumbnailGenerated = true;
+        emitProgress('thumbnail', 'Thumbnail generated!', 90);
+      } catch (thumbErr) {
+        console.error("⚠️ Thumbnail generation failed (non-fatal):", thumbErr);
+        // Don't fail the whole operation if thumbnail fails
+      }
+    }
+
+    // Delete original files if requested
+    if (deleteOriginals) {
+      emitProgress('cleanup', 'Deleting original files...', 92);
+      
+      for (const f of safeFiles) {
+        try {
+          const videoPath = path.join(VIDEOS_DIR, f);
+          const basename = path.parse(f).name;
+          const thumbPath = path.join(THUMB_DIR, `${basename}.jpg`);
+
+          // Delete video
+          await fs.unlink(videoPath);
+          deletedFiles.push(f);
+
+          // Delete thumbnail if exists
+          if (fsSync.existsSync(thumbPath)) {
+            await fs.unlink(thumbPath);
+            deletedFiles.push(`${basename}.jpg`);
+          }
+
+          console.log(`🗑️ Deleted: ${f}`);
+        } catch (delErr) {
+          console.error(`⚠️ Failed to delete ${f}:`, delErr);
+        }
+      }
+      
+      emitProgress('cleanup', `Deleted ${deletedFiles.length} files`, 95);
+    }
+
+    emitProgress('complete', 'Merge operation complete!', 100);
+
+    res.json({
+      success: true,
+      mergedFilename: baseName,
+      mergedPath: `/videos/${baseName}`,
+      url: `/videos/${baseName}`,
+      thumbnailGenerated,
+      deletedFiles: deleteOriginals ? deletedFiles : []
+    });
+  } catch (err) {
+    console.error("❌ /api/admin/merge failed:", err);
+    
+    // Clean up temp file on error
+    if (tempListFile) {
+      await fs.unlink(tempListFile).catch(() => {});
+    }
+
+    const io = global.__io;
+    if (io) {
+      io.emit('merge:error', { error: err.message });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: err.message || "Merge failed"
+    });
+  }
+});
+
+export default router;

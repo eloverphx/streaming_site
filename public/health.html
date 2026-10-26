@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CrashTheNet — Health</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg: #071029;
+      --card: #081724;
+      --muted: #9fb0c6;
+      --accent: #22c55e;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+    }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: linear-gradient(180deg,#051226 0%, #061423 100%);
+      color: #e6eef8;
+    }
+    .container {
+      max-width: 800px;
+      margin: 24px auto;
+      padding: 18px;
+      box-sizing: border-box;
+    }
+    h1 {
+      font-size: 22px;
+      margin: 0 0 12px;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    .label {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .value {
+      font-size: 14px;
+    }
+    .status-ok {
+      color: #4ade80;
+    }
+    .status-bad {
+      color: #f97373;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(34,197,94,0.1);
+      border: 1px solid rgba(34,197,94,0.3);
+    }
+    .btn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: #e5e7eb;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .btn:hover {
+      background: rgba(255,255,255,0.12);
+    }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .small {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* 🎨 NEW: Progress bar styles */
+    .progress-container {
+      margin-top: 12px;
+      display: none; /* Hidden by default */
+    }
+    .progress-bar-bg {
+      width: 100%;
+      height: 8px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+      border-radius: 999px;
+      width: 0%;
+      transition: width 0.3s ease;
+      position: relative;
+    }
+    .progress-bar-fill::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255,255,255,0.3) 50%,
+        transparent 100%
+      );
+      animation: shimmer 2s infinite;
+    }
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    .progress-text {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .progress-video-name {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 4px;
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>System Health</h1>
+
+  <div class="card">
+    <div class="label">Server status</div>
+    <div class="value">
+      <span id="statusText" class="status-ok">Checking...</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">Uptime</div>
+    <div class="value" id="uptime">–</div>
+  </div>
+
+  <div class="card">
+    <div class="label">Timestamp</div>
+    <div class="value" id="timestamp">–</div>
+  </div>
+
+  <div class="card">
+    <div class="label" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Cloudflare Sync</span>
+      <button id="syncNowBtn" class="btn">Sync Now</button>
+    </div>
+    <div class="value" id="cfSyncStatus">–</div>
+    <div class="value small" id="cfSyncDetails">–</div>
+    
+    <!-- 🎨 NEW: Progress bar -->
+    <div class="progress-container" id="progressContainer">
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progressBarFill"></div>
+      </div>
+      <div class="progress-text">
+        <span id="progressText">0%</span>
+        <span id="progressTimemark"></span>
+      </div>
+      <div class="progress-video-name" id="progressVideoName"></div>
+    </div>
+    
+    <div class="value small" id="cfProgress"></div>
+    <div class="value small" id="cfSyncFeedback"></div>
+  </div>
+
+  <div class="card">
+    <div class="label">Live endpoint</div>
+    <div class="value">
+      <span id="liveStatus" class="pill">Checking live stream...</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">API: /api/videos</div>
+    <div class="value" id="videosStatus">Checking...</div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+  const syncNowBtn      = document.getElementById('syncNowBtn');
+  const cfSyncFeedback  = document.getElementById('cfSyncFeedback');
+  const statusTextEl    = document.getElementById('statusText');
+  const uptimeEl        = document.getElementById('uptime');
+  const timestampEl     = document.getElementById('timestamp');
+  const cfStatusEl      = document.getElementById('cfSyncStatus');
+  const cfDetailsEl     = document.getElementById('cfSyncDetails');
+  const liveEl          = document.getElementById('liveStatus');
+  const videosStatusEl  = document.getElementById('videosStatus');
+  const cfProgressEl    = document.getElementById('cfProgress');
+
+  // 🎨 NEW: Progress bar elements
+  const progressContainer = document.getElementById('progressContainer');
+  const progressBarFill   = document.getElementById('progressBarFill');
+  const progressText      = document.getElementById('progressText');
+  const progressTimemark  = document.getElementById('progressTimemark');
+  const progressVideoName = document.getElementById('progressVideoName');
+
+  function setServerError(message) {
+    statusTextEl.textContent = message || 'ERROR';
+    statusTextEl.className = 'status-bad';
+  }
+
+  async function checkHealth() {
+    if (!statusTextEl || !uptimeEl || !timestampEl) return;
+
+    try {
+      const res = await fetch('/api/health');
+      if (!res.ok) {
+        throw new Error(`Health JSON failed with status ${res.status}`);
+      }
+
+      let data;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        throw new Error('Health JSON: invalid JSON response');
+      }
+
+      if (!data || typeof data !== 'object') {
+        throw new Error('Health JSON: response is not an object');
+      }
+
+      statusTextEl.textContent = data.ok ? 'OK' : 'ERROR';
+      statusTextEl.className = data.ok ? 'status-ok' : 'status-bad';
+
+      const uptime = typeof data.uptime === 'number' ? `${data.uptime.toFixed(0)}s` : '–';
+      uptimeEl.textContent = uptime;
+
+      timestampEl.textContent = data.timestamp || '–';
+
+      const cf = data.status || {};
+      if (cf.running) {
+        cfStatusEl.textContent = 'Sync running...';
+        cfStatusEl.style.color = '#facc15';
+      } else if (cf.errors && cf.errors.length) {
+        cfStatusEl.textContent = 'Last sync had errors';
+        cfStatusEl.style.color = '#f97373';
+      } else if (cf.lastRun) {
+        cfStatusEl.textContent = 'Last sync completed';
+        cfStatusEl.style.color = '#4ade80';
+      } else {
+        cfStatusEl.textContent = 'No sync has run yet';
+        cfStatusEl.style.color = '#e5e7eb';
+      }
+
+      const parts = [];
+      if (cf.lastRun) parts.push(`Last run: ${cf.lastRun}`);
+      if (typeof cf.downloaded === 'number') parts.push(`Downloaded: ${cf.downloaded}`);
+      if (typeof cf.skipped === 'number') parts.push(`Skipped: ${cf.skipped}`);
+      if (cf.errors?.length) parts.push(`Errors: ${cf.errors.length}`);
+
+      cfDetailsEl.textContent = parts.join(' | ') || '–';
+
+    } catch (e) {
+      console.error('checkHealth error:', e);
+      setServerError('ERROR (health-json)');
+      if (cfStatusEl && cfDetailsEl) {
+        cfStatusEl.textContent = 'Health endpoint failed';
+        cfStatusEl.style.color = '#f97373';
+        cfDetailsEl.textContent = e.message || 'Unknown error';
+      }
+    }
+  }
+
+  async function checkLive() {
+    if (!liveEl) return;
+
+    try {
+      const res = await fetch(
+        'https://customer-xej3po38k2csewdp.cloudflarestream.com/416a6eec31923c23dd86dfb76c6d220a/manifest/video.m3u8',
+        { method: 'HEAD' }
+      );
+
+      if (res.ok) {
+        liveEl.textContent = 'Live endpoint reachable';
+        liveEl.style.borderColor = 'rgba(34,197,94,0.3)';
+        liveEl.style.background = 'rgba(34,197,94,0.1)';
+      } else {
+        liveEl.textContent = `Live endpoint not reachable (status ${res.status})`;
+        liveEl.style.borderColor = 'rgba(248,113,113,0.3)';
+        liveEl.style.background = 'rgba(248,113,113,0.1)';
+      }
+    } catch (err) {
+      console.error('checkLive error:', err);
+      liveEl.textContent = 'Live endpoint not reachable';
+      liveEl.style.borderColor = 'rgba(248,113,113,0.3)';
+      liveEl.style.background = 'rgba(248,113,113,0.1)';
+    }
+  }
+
+  async function checkVideosApi() {
+    if (!videosStatusEl) return;
+
+    try {
+      const res = await fetch('/api/videos', { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error(`Videos API failed with status ${res.status}`);
+
+      let videos;
+      try {
+        videos = await res.json();
+      } catch {
+        throw new Error('Videos API returned invalid JSON');
+      }
+
+      const count = Array.isArray(videos) ? videos.length : 0;
+      videosStatusEl.textContent = `OK — ${count} video(s) found`;
+      videosStatusEl.style.color = '#4ade80';
+    } catch (e) {
+      console.error('checkVideosApi error:', e);
+      videosStatusEl.textContent = 'ERROR — cannot reach /api/videos';
+      videosStatusEl.style.color = '#f97373';
+    }
+  }
+
+  // 🎨 NEW: Show/hide progress bar
+  function showProgressBar() {
+    progressContainer.style.display = 'block';
+  }
+
+  function hideProgressBar() {
+    progressContainer.style.display = 'none';
+    progressBarFill.style.width = '0%';
+    progressText.textContent = '0%';
+    progressTimemark.textContent = '';
+    progressVideoName.textContent = '';
+  }
+
+  // Sync Now button handler (force overwrite)
+  if (syncNowBtn && cfSyncFeedback) {
+    syncNowBtn.addEventListener('click', async () => {
+      syncNowBtn.disabled = true;
+      syncNowBtn.textContent = 'Syncing...';
+      cfSyncFeedback.textContent = 'Starting forced sync...';
+      cfSyncFeedback.style.color = '#e5e7eb';
+
+      try {
+        const res = await fetch('/api/cloudflare/sync', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ force: true })
+        });
+
+        let data = null;
+        try {
+          data = await res.json();
+        } catch {
+          // Some backends may return empty body on success
+        }
+
+        if (res.ok && data?.success) {
+          cfSyncFeedback.textContent = 'Forced sync started!';
+          cfSyncFeedback.style.color = '#4ade80';
+        } else {
+          const msg = data && (data.error || data.details) || `HTTP ${res.status}`;
+          cfSyncFeedback.textContent = 'Sync failed: ' + msg;
+          cfSyncFeedback.style.color = '#f97373';
+        }
+      } catch (err) {
+        console.error('syncNow error:', err);
+        cfSyncFeedback.textContent = 'Sync request failed.';
+        cfSyncFeedback.style.color = '#f97373';
+      } finally {
+        syncNowBtn.disabled = false;
+        syncNowBtn.textContent = 'Sync Now';
+        checkHealth();
+        checkVideosApi();
+      }
+    });
+  }
+
+  // Initial checks
+  checkHealth();
+  checkLive();
+  checkVideosApi();
+
+  // 🎨 Socket.IO event handlers with progress bar
+  const socket = io();
+
+  socket.on('connect', () => {
+    console.log('🟢 Socket connected');
+  });
+
+  socket.on('sync:start', data => {
+    cfStatusEl.textContent = 'Sync started';
+    cfStatusEl.style.color = '#facc15';
+    cfProgressEl.textContent = `0 / ${data.total} videos to process`;
+    cfProgressEl.style.color = '#e5e7eb';
+    hideProgressBar(); // Reset progress bar
+  });
+
+  socket.on('sync:video:start', data => {
+    cfProgressEl.textContent = `Processing video ${data.index} of ${data.total}`;
+    showProgressBar();
+    progressBarFill.style.width = '0%';
+    progressText.textContent = '0%';
+    progressTimemark.textContent = '';
+    progressVideoName.textContent = `UID: ${data.uid}`;
+  });
+
+  // 🎨 NEW: Real-time progress updates
+  socket.on('sync:video:progress', data => {
+    const percent = data.percent || 0;
+    progressBarFill.style.width = `${percent}%`;
+    progressText.textContent = `${percent}%`;
+    progressTimemark.textContent = data.timemark || '';
+    progressVideoName.textContent = `Converting: ${data.uid}`;
+  });
+
+  socket.on('sync:video:done', data => {
+    progressBarFill.style.width = '100%';
+    progressText.textContent = '100%';
+    progressTimemark.textContent = 'Complete';
+    
+    cfProgressEl.textContent = `✅ Downloaded ${data.downloaded} video(s)`;
+    cfProgressEl.style.color = '#4ade80';
+    
+    // Hide progress bar after 2 seconds
+    setTimeout(() => {
+      hideProgressBar();
+    }, 2000);
+  });
+
+  socket.on('sync:video:error', data => {
+    cfProgressEl.textContent = `❌ Error: ${data.error}`;
+    cfProgressEl.style.color = '#f97373';
+    
+    progressBarFill.style.background = 'linear-gradient(90deg, #f97373 0%, #dc2626 100%)';
+    progressText.textContent = 'Failed';
+    progressVideoName.textContent = `Error on: ${data.uid}`;
+    
+    // Hide progress bar after 3 seconds
+    setTimeout(() => {
+      hideProgressBar();
+      progressBarFill.style.background = 'linear-gradient(90deg, #22c55e 0%, #16a34a 100%)';
+    }, 3000);
+  });
+
+  socket.on('sync:complete', data => {
+    cfStatusEl.textContent = 'Sync complete';
+    cfStatusEl.style.color = '#4ade80';
+    
+    const s = data.status;
+    cfProgressEl.textContent = 
+      `✅ Complete — ${s.downloaded} downloaded, ${s.skipped} skipped, ${s.errors.length} errors`;
+    cfProgressEl.style.color = s.errors.length > 0 ? '#facc15' : '#4ade80';
+    
+    hideProgressBar();
+    
+    // Refresh health data
+    setTimeout(() => {
+      checkHealth();
+      checkVideosApi();
+    }, 1000);
+  });
+
+  // 🎨 NEW: Handle sync status updates (from server restarts, etc.)
+  socket.on('sync:status', data => {
+    if (data.running) {
+      cfStatusEl.textContent = 'Sync in progress';
+      cfStatusEl.style.color = '#facc15';
+      
+      if (data.currentVideo) {
+        showProgressBar();
+        progressVideoName.textContent = `Converting: ${data.currentVideo}`;
+        progressBarFill.style.width = `${data.progress || 0}%`;
+        progressText.textContent = `${data.progress || 0}%`;
+      }
+    }
+  });
+</script>
+<footer style="text-align:center;padding:40px 20px;color:#9fb0c6;font-size:12px;">
+  © 2024 CrashTheNet • <a href="/admin" style="color:#22c55e;text-decoration:none;">Admin</a>
+</footer>
+</body>
+</html>

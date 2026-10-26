@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>CrashTheNet — Live</title>
+<link rel="icon" href="data:," />
+
+<style>
+:root{
+  --bg:#050b1a;
+  --card:#0b1628;
+  --muted:#9fb0c6;
+  --accent:#ef4444;
+  --ok:#22c55e;
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial;
+}
+html,body{height:100%;margin:0;background:radial-gradient(1200px 600px at 50% -200px,#0b1c3d 0%,#050b1a 60%);color:#e6eef8}
+
+.container{max-width:1400px;margin:20px auto;padding:18px}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}
+h1{font-size:20px;margin:0}
+
+.badge-live{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:white;background:var(--accent);padding:4px 8px;border-radius:999px}
+.badge-live::before{content:"";width:8px;height:8px;border-radius:50%;background:white;animation:pulse 1.2s infinite}
+@keyframes pulse{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
+
+.status-text{font-size:13px;color:var(--muted)}
+
+.player-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.05);border-radius:14px;padding:14px}
+.player{position:relative;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:black}
+video{width:100%;height:100%;object-fit:contain;background:black}
+
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55)}
+.overlay-card{background:rgba(8,12,20,.75);border-radius:14px;padding:22px;text-align:center;max-width:420px}
+.overlay-card h2{margin:0 0 8px;font-size:20px}
+.overlay-card p{margin:0 0 14px;color:var(--muted)}
+.overlay-card button{background:var(--accent);border:0;padding:10px 16px;border-radius:10px;color:white;font-weight:600;cursor:pointer}
+
+.progress-wrap{margin-top:14px}
+.progress-label{font-size:13px;color:var(--muted);margin-bottom:6px}
+.progress-bar{height:10px;background:#0b1628;border-radius:999px;overflow:hidden;border:1px solid rgba(255,255,255,.08)}
+.progress-fill{height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#4ade80);transition:width .3s}
+.progress-meta{font-size:12px;color:var(--muted);margin-top:4px}
+
+.video-card.active{
+  border:1px solid var(--accent);
+  box-shadow:0 0 0 2px rgba(239,68,68,.3);
+  transform:translateY(-3px);
+}
+/* Viewer count */
+.viewer-count{margin-top:8px;font-size:14px;color:var(--ok);text-align:right}
+
+footer{margin-top:18px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+footer a{text-decoration:none}
+footer button{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:#e6eef8;padding:8px 14px;border-radius:10px;cursor:pointer}
+
+.recent-videos{
+  margin-top:30px;
+}
+
+.video-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+  gap:14px;
+}
+
+.video-card{
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:12px;
+  overflow:hidden;
+  cursor:pointer;
+  transition:transform .2s;
+}
+
+.video-card:hover{
+  transform:translateY(-3px);
+}
+
+.video-thumb{
+  width:100%;
+  aspect-ratio:16/9;
+  object-fit:cover;
+  background:#000;
+}
+
+.video-info{
+  padding:10px;
+  font-size:13px;
+}
+
+.video-title{
+  font-weight:600;
+  margin-bottom:4px;
+}
+
+.video-date{
+  color:var(--muted);
+  font-size:12px;
+}
+
+/* Welcome screen */
+#welcome{position:fixed;inset:0;background:radial-gradient(800px 400px at 50% 20%,#1e3a8a 0%,#020617 60%);display:flex;align-items:center;justify-content:center;z-index:9999;animation:fadeOut 1s ease forwards;animation-delay:2.4s}
+#welcome .box{text-align:center}
+#welcome h1{font-size:36px;margin:0 0 10px}
+#welcome p{color:#c7d2fe;font-size:16px}
+@keyframes fadeOut{to{opacity:0;pointer-events:none}}
+</style>
+</head>
+<body>
+
+<div id="welcome">
+  <div class="box">
+    <h1>CrashTheNet</h1>
+    <p>Preparing the live stream…</p>
+  </div>
+</div>
+
+<div class="container">
+<header>
+  <h1>CrashTheNet — Live Stream</h1>
+  <div id="statusArea" class="status-text">Checking live status…</div>
+</header>
+
+<section class="player-card">
+  <div class="player">
+    <video id="player" playsinline controls></video>
+    <div id="offlineOverlay" class="overlay" style="display:none">
+      <div class="overlay-card">
+        <h2>Stream Offline</h2>
+        <p id="endedText">The stream is not currently live.</p>
+        <button id="retryBtn">Retry</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Viewer count below video player -->
+  <div id="viewerCount" class="viewer-count">Viewers: 0</div>
+
+  <button id="backToLive" style="
+  display:none;
+  margin-top:10px;
+  background:var(--accent);
+  border:0;
+  padding:8px 14px;
+  border-radius:8px;
+  color:white;
+  font-weight:600;
+  cursor:pointer;
+">
+  🔴 Back to Live
+</button>
+
+  <div id="syncProgress" class="progress-wrap" style="display:none">
+    <div class="progress-label">Processing & Syncing Videos</div>
+    <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+    <div id="progressMeta" class="progress-meta"></div>
+  </div>
+</section>
+
+<section class="recent-videos">
+  <h2 style="margin:20px 0 12px;font-size:18px;">Recent Videos</h2>
+  <div id="recentVideos" class="video-grid"></div>
+</section>
+
+<footer>
+  <div class="status-text" id="liveBadge"></div>
+  <a href="/videos.html"><button>▶ Past Videos</button></a>
+</footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.0/dist/hls.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+const HLS_URL = 'https://customer-xej3po38k2csewdp.cloudflarestream.com/416a6eec31923c23dd86dfb76c6d220a/manifest/video.m3u8';
+const player = document.getElementById('player');
+const overlay = document.getElementById('offlineOverlay');
+const retryBtn = document.getElementById('retryBtn');
+const endedText = document.getElementById('endedText');
+const statusArea = document.getElementById('statusArea');
+const liveBadge = document.getElementById('liveBadge');
+const viewerCount = document.getElementById('viewerCount');
+
+const progressWrap = document.getElementById('syncProgress');
+const progressFill = document.getElementById('progressFill');
+const progressMeta = document.getElementById('progressMeta');
+const backToLiveBtn = document.getElementById('backToLive');
+
+let hls = null;
+let lastLiveAt = null;
+
+function unload(){ if(hls){hls.destroy();hls=null;} player.removeAttribute('src'); player.load(); }
+
+function showLive(){
+  overlay.style.display='none';
+  liveBadge.innerHTML='<span class="badge-live">LIVE</span>';
+  statusArea.textContent='Live now';
+  lastLiveAt = Date.now();
+}
+
+function showOffline(){
+  overlay.style.display='flex';
+  if(lastLiveAt){
+    const mins = Math.floor((Date.now()-lastLiveAt)/60000);
+    endedText.textContent = `Stream ended ${mins} min ago`;
+  }
+  liveBadge.textContent='';
+  statusArea.textContent='Offline';
+}
+
+async function checkManifest(){
+  try{const r=await fetch(HLS_URL,{method:'HEAD'});return r.ok;}catch{return false;}
+}
+
+function loadLive(){
+  unload();
+  if(player.canPlayType('application/vnd.apple.mpegurl')){
+    player.src=HLS_URL; player.play(); showLive(); return;
+  }
+  if(Hls.isSupported()){
+    hls=new Hls();
+    hls.attachMedia(player);
+    hls.on(Hls.Events.MEDIA_ATTACHED,()=>hls.loadSource(HLS_URL));
+    hls.on(Hls.Events.MANIFEST_PARSED,()=>{player.play();showLive();});
+    hls.on(Hls.Events.ERROR,(_,d)=>{if(d.fatal)showOffline();});
+  } else showOffline();
+}
+
+async function tryLive(){ (await checkManifest()) ? loadLive() : showOffline(); }
+retryBtn.onclick = tryLive;
+tryLive();
+setInterval(async()=>{ if(!(await checkManifest())) showOffline(); },15000);
+
+// ---- Socket.IO Sync Progress & Viewers ----
+const socket = io();
+
+socket.on('sync:start', ({total})=>{
+  progressWrap.style.display='block';
+  progressFill.style.width='0%';
+  progressMeta.textContent=`Starting sync (${total} videos)`;
+});
+
+socket.on('sync:progress', ({current,total,uid})=>{
+  const pct = Math.round((current/total)*100);
+  progressFill.style.width = pct+'%';
+  progressMeta.textContent = `Processing ${current} of ${total}`;
+});
+
+socket.on('sync:complete', ({downloaded,skipped})=>{
+  progressFill.style.width='100%';
+  progressMeta.textContent = `Complete — ${downloaded} downloaded, ${skipped} skipped`;
+  setTimeout(()=>progressWrap.style.display='none',4000);
+});
+
+// ---- Viewer count ----
+socket.on('viewers:update', ({ viewers }) => {
+  viewerCount.textContent = `Viewers: ${viewers}`;
+});
+
+// ---- Recent Videos ----
+const recentContainer = document.getElementById('recentVideos');
+
+async function loadRecentVideos(){
+  try{
+    const res = await fetch('/api/videos');
+    const videos = await res.json();
+    renderRecent(videos.slice(0,6)); // only show newest 6
+  }catch(err){
+    console.error('Failed to load recent videos', err);
+  }
+}
+
+function loadVideoIntoPlayer(src, title, clickedCard){
+  unload();
+
+  overlay.style.display = 'none';
+  liveBadge.textContent = '';
+  statusArea.textContent = `Playing: ${title}`;
+
+  player.src = src;
+  player.play().catch(()=>{});
+
+  // Show back to live button
+  backToLiveBtn.style.display = 'inline-block';
+
+  // Highlight selected card
+  document.querySelectorAll('.video-card').forEach(c => {
+    c.classList.remove('active');
+  });
+
+  if(clickedCard){
+    clickedCard.classList.add('active');
+  }
+}
+
+function renderRecent(videos){
+  recentContainer.innerHTML = '';
+
+  videos.forEach(v=>{
+    const card = document.createElement('div');
+    card.className = 'video-card';
+    card.innerHTML = `
+      <video class="video-thumb" src="${v.src}" muted></video>
+      <div class="video-info">
+        <div class="video-title">${v.title.replace('.mp4','')}</div>
+      </div>
+    `;
+
+    card.onclick = ()=> {
+  loadVideoIntoPlayer(
+    v.src,
+    v.title.replace('.mp4',''),
+    card
+  );
+};
+    recentContainer.appendChild(card);
+  });
+}
+
+// load on page open
+loadRecentVideos();
+
+// auto-update when sync finishes
+socket.on('videos:update', () => {
+  loadRecentVideos();
+});
+
+backToLiveBtn.onclick = ()=>{
+  backToLiveBtn.style.display = 'none';
+
+  // Remove active highlight
+  document.querySelectorAll('.video-card').forEach(c => {
+    c.classList.remove('active');
+  });
+
+  tryLive(); // restart HLS stream
+};
+
+</script>
+<footer style="text-align:center;padding:40px 20px;color:#9fb0c6;font-size:12px;">
+  © 2024 CrashTheNet • <a href="/admin" style="color:#22c55e;text-decoration:none;">Admin</a>
+</footer>
+
+</body>
+</html>

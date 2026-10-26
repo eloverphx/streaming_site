@@ -1,0 +1,27 @@
+services:
+  crashthenet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crashthenet
+    restart: unless-stopped
+    ports:
+      - "3301:3301"
+    environment:
+      - CF_API_TOKEN=${CF_API_TOKEN}
+      - CF_ACCOUNT_ID=${CF_ACCOUNT_ID}
+    volumes:
+      - ./videos:/app/videos
+      - ./public:/app/public
+    networks:
+      - crashthenet-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3301/health >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 4s
+      retries: 5
+      start_period: 15s
+
+networks:
+  crashthenet-network:
+    driver: bridge

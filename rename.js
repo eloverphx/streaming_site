@@ -1,0 +1,87 @@
+// rename.js - Add this to your backend routes
+import express from 'express';
+import fs from 'fs';
+import path from 'path';
+
+const router = express.Router();
+
+const VIDEO_DIR = path.resolve('./public/videos');
+const THUMB_DIR = path.resolve('./public/thumbnails');
+
+// Get list of videos with their thumbnails
+router.get('/api/admin/files', (req, res) => {
+  try {
+    const videos = fs.readdirSync(VIDEO_DIR)
+      .filter(f => f.endsWith('.mp4'))
+      .map(filename => {
+        const basename = path.parse(filename).name;
+        const thumbPath = path.join(THUMB_DIR, `${basename}.jpg`);
+        const hasThumbnail = fs.existsSync(thumbPath);
+        
+        return {
+          filename,
+          basename,
+          hasThumbnail,
+          videoPath: `/videos/${filename}`,
+          thumbPath: hasThumbnail ? `/thumbnails/${basename}.jpg` : null
+        };
+      })
+      .sort((a, b) => b.basename.localeCompare(a.basename)); // Newest first
+
+    res.json(videos);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Rename video and thumbnail
+router.post('/rename', (req, res) => {
+  try {
+    const { oldName, newName } = req.body;
+
+    if (!oldName || !newName) {
+      return res.status(400).json({ error: 'oldName and newName are required' });
+    }
+
+    // Validate newName (no path traversal, valid filename)
+    if (newName.includes('/') || newName.includes('\\') || newName.includes('..')) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+
+    const oldBasename = path.parse(oldName).name;
+    const newBasename = path.parse(newName).name;
+
+    const oldVideoPath = path.join(VIDEO_DIR, oldName);
+    const newVideoPath = path.join(VIDEO_DIR, `${newBasename}.mp4`);
+    const oldThumbPath = path.join(THUMB_DIR, `${oldBasename}.jpg`);
+    const newThumbPath = path.join(THUMB_DIR, `${newBasename}.jpg`);
+
+    // Check if old video exists
+    if (!fs.existsSync(oldVideoPath)) {
+      return res.status(404).json({ error: 'Video file not found' });
+    }
+
+    // Check if new name already exists
+    if (fs.existsSync(newVideoPath)) {
+      return res.status(409).json({ error: 'A file with that name already exists' });
+    }
+
+    // Rename video
+    fs.renameSync(oldVideoPath, newVideoPath);
+
+    // Rename thumbnail if it exists
+    if (fs.existsSync(oldThumbPath)) {
+      fs.renameSync(oldThumbPath, newThumbPath);
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'File renamed successfully',
+      newFilename: `${newBasename}.mp4`
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+export default router;

@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin — Rename & Merge Videos</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg:#071029; --card:#081724; --muted:#9fb0c6; --accent:#ef4444;
+    font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial;
+  }
+  html, body {height:100%; margin:0; background:linear-gradient(180deg,#051226 0%, #061423 100%); color:#e6eef8;}
+  .container{max-width:1400px;margin:18px auto;padding:18px;box-sizing:border-box;}
+  header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;}
+  h1{font-size:20px;margin:0;color:#ef4444;}
+  a.btn{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#e6eef8;padding:8px 12px;border-radius:8px;font-size:13px;text-decoration:none;display:inline-block;}
+  a.btn:hover{background:rgba(255,255,255,0.1);}
+  
+  .file-list{display:flex;flex-direction:column;gap:12px;}
+  .file-item{background:var(--card);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:16px;display:flex;gap:16px;align-items:center;}
+  .file-item:hover{border-color:rgba(255,255,255,0.12);}
+  .file-item.selected{border-color:#ef4444;background:rgba(239,68,68,0.05);}
+  
+  .thumb-preview{width:120px;height:68px;background:center/cover no-repeat #07122b;border-radius:6px;flex-shrink:0;}
+  .file-info{flex:1;min-width:0;}
+  .current-name{font-size:14px;font-weight:500;margin-bottom:8px;word-break:break-all;}
+  .file-meta{font-size:12px;color:var(--muted);}
+  
+  .rename-section{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .rename-input{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#e6eef8;padding:8px 12px;border-radius:6px;font-size:13px;flex:1;min-width:200px;}
+  .rename-input:focus{outline:none;border-color:var(--accent);}
+  
+  .btn-rename{background:var(--accent);border:none;color:#fff;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;}
+  .btn-rename:hover{background:#dc2626;}
+  .btn-rename:disabled{opacity:0.5;cursor:not-allowed;}
+  
+  .btn-delete{background:#dc2626;border:none;color:#fff;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;}
+  .btn-delete:hover{background:#b91c1c;}
+  .btn-delete:disabled{opacity:0.5;cursor:not-allowed;}
+  
+  .status{font-size:12px;padding:4px 8px;border-radius:4px;display:inline-block;}
+  .status.success{background:rgba(34,197,94,0.2);color:#4ade80;}
+  .status.error{background:rgba(239,68,68,0.2);color:#f87171;}
+  
+  .loading{text-align:center;padding:40px;color:var(--muted);}
+  
+  .upload-toolbar{
+    margin-bottom:16px;
+    padding:16px;
+    border-radius:10px;
+    background:rgba(15,23,42,0.85);
+    border:1px solid rgba(148,163,184,0.25);
+  }
+  
+  .upload-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:16px;
+    margin-bottom:12px;
+  }
+  
+  .upload-title{
+    font-size:14px;
+    font-weight:600;
+    color:#e5e7eb;
+    margin-bottom:4px;
+  }
+  
+  .upload-subtitle{
+    font-size:12px;
+    color:var(--muted);
+  }
+  
+  .upload-controls{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+  
+  .file-input-wrapper{
+    position:relative;
+    overflow:hidden;
+    display:inline-block;
+  }
+  
+  .file-input-wrapper input[type=file]{
+    position:absolute;
+    left:-9999px;
+  }
+  
+  .btn-upload{
+    background:#3b82f6;
+    border:none;
+    color:#fff;
+    padding:8px 16px;
+    border-radius:6px;
+    font-size:13px;
+    cursor:pointer;
+    font-weight:500;
+  }
+  
+  .btn-upload:hover{
+    background:#2563eb;
+  }
+  
+  .merge-toolbar{
+    margin-bottom:16px;
+    padding:16px;
+    border-radius:10px;
+    background:rgba(15,23,42,0.85);
+    border:1px solid rgba(148,163,184,0.25);
+  }
+  
+  .merge-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:16px;
+    margin-bottom:12px;
+  }
+  
+  .merge-title{
+    font-size:14px;
+    font-weight:600;
+    color:#e5e7eb;
+    margin-bottom:4px;
+  }
+  
+  .merge-subtitle{
+    font-size:12px;
+    color:var(--muted);
+  }
+  
+  .merge-controls{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+  
+  .merge-options{
+    display:flex;
+    gap:12px;
+    margin-bottom:12px;
+    flex-wrap:wrap;
+  }
+  
+  .checkbox-label{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:13px;
+    color:#e6eef8;
+    cursor:pointer;
+  }
+  
+  .checkbox-label input[type="checkbox"]{
+    accent-color:#ef4444;
+    cursor:pointer;
+  }
+  
+  .progress-bar{
+    width:100%;
+    height:6px;
+    background:rgba(255,255,255,0.1);
+    border-radius:3px;
+    overflow:hidden;
+    margin-top:12px;
+    display:none;
+  }
+  
+  .progress-fill{
+    height:100%;
+    background:linear-gradient(90deg, #ef4444, #dc2626);
+    width:0%;
+    transition:width 0.3s ease;
+  }
+  
+  .progress-text{
+    font-size:12px;
+    color:var(--muted);
+    margin-top:6px;
+    display:none;
+  }
+  
+  .select-badge{
+    display:inline-block;
+    background:#ef4444;
+    color:#fff;
+    font-size:11px;
+    padding:2px 6px;
+    border-radius:4px;
+    margin-left:8px;
+    font-weight:600;
+  }
+
+  .file-item[draggable="true"] {
+    cursor: grab;
+  }
+  .file-item[draggable="true"]:active {
+    cursor: grabbing;
+  }
+
+  .file-item {
+    transition: transform 0.2s ease, background-color 0.2s ease;
+  }
+
+  .file-item.selected {
+    border-left: 4px solid var(--accent);
+  }
+  
+  .delete-toolbar{
+    margin-bottom:16px;
+    padding:16px;
+    border-radius:10px;
+    background:rgba(220,38,38,0.1);
+    border:1px solid rgba(220,38,38,0.3);
+    display:none;
+  }
+  
+  .delete-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:16px;
+    margin-bottom:12px;
+  }
+  
+  .delete-title{
+    font-size:14px;
+    font-weight:600;
+    color:#fca5a5;
+  }
+  
+  .delete-controls{
+    display:flex;
+    gap:8px;
+  }
+  
+  .btn-mass-delete{
+    background:#dc2626;
+    border:none;
+    color:#fff;
+    padding:8px 16px;
+    border-radius:6px;
+    font-size:13px;
+    cursor:pointer;
+    font-weight:500;
+  }
+  
+  .btn-mass-delete:hover{
+    background:#b91c1c;
+  }
+  
+  .btn-mass-delete:disabled{
+    opacity:0.5;
+    cursor:not-allowed;
+  }
+  
+  .upload-file-list{
+    margin-top:12px;
+    font-size:12px;
+    color:var(--muted);
+  }
+  
+  .upload-file-item{
+    padding:6px 0;
+    border-bottom:1px solid rgba(255,255,255,0.05);
+  }
+  
+  @media(max-width:768px){
+    .file-item{flex-direction:column;align-items:flex-start;}
+    .thumb-preview{width:100%;height:auto;aspect-ratio:16/9;}
+    .rename-section{width:100%;}
+    .rename-input{width:100%;}
+    .merge-header{flex-direction:column;}
+    .merge-controls{width:100%;}
+    .upload-header{flex-direction:column;}
+    .upload-controls{width:100%;}
+  }
+
+  .rename-section {
+    display: flex !important;
+    gap: 10px !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+
+  .rename-input {
+    flex: 1 !important;
+    min-width: 0 !important;
+  }
+
+  .btn-rename, .btn-delete {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    padding: 8px 12px !important;
+    cursor: pointer !important;
+    border-radius: 4px !important;
+    border: none !important;
+    font-weight: bold !important;
+  }
+
+  .btn-delete {
+    background-color: #ef4444 !important;
+    color: white !important;
+  }
+
+  .btn-rename {
+    background-color: #3b82f6 !important;
+    color: white !important;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>🔒 Admin — Rename & Merge Videos</h1>
+    <a class="btn" href="/videos.html">⬅ Back to Videos</a>
+  </header>
+
+  <!-- Upload Toolbar -->
+  <div class="upload-toolbar">
+    <div class="upload-header">
+      <div>
+        <div class="upload-title">📤 Upload Videos</div>
+        <div class="upload-subtitle">
+          Upload one or multiple video files. Thumbnails will be generated automatically.
+        </div>
+      </div>
+    </div>
+    
+    <div class="upload-controls">
+      <div class="file-input-wrapper">
+        <label for="fileInput" class="btn-upload">
+          Choose Files
+        </label>
+        <input 
+          type="file" 
+          id="fileInput" 
+          accept="video/" 
+          multiple
+        />
+      </div>
+      <input
+        id="uploadCustomName"
+        type="text"
+        class="rename-input"
+        style="max-width:300px;"
+        placeholder="Custom name (optional, single file only)"
+      />
+      <button
+        id="btnUpload"
+        class="btn-upload"
+        disabled
+      >
+        Upload
+      </button>
+    </div>
+    
+    <div class="upload-file-list" id="uploadFileList"></div>
+    
+    <div class="progress-bar" id="uploadProgressBar">
+      <div class="progress-fill" id="uploadProgressFill"></div>
+    </div>
+    <div class="progress-text" id="uploadProgressText"></div>
+    
+    <div id="uploadStatus" style="margin-top:12px;min-height:20px;"></div>
+  </div>
+
+  <!-- Delete Toolbar -->
+  <div id="deleteToolbar" class="delete-toolbar">
+    <div class="delete-header">
+      <div>
+        <div class="delete-title">🗑️ Mass Delete</div>
+        <div class="upload-subtitle">
+          <span id="deleteCount">0</span> file(s) selected for deletion
+        </div>
+      </div>
+      <div class="delete-controls">
+        <button
+          id="btnMassDelete"
+          class="btn-mass-delete"
+          disabled
+        >
+          Delete Selected
+        </button>
+        <button
+          id="btnCancelDelete"
+          class="btn-rename"
+          style="background:#64748b;"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="moveToolbar" style="display:none; padding:10px; background:#1e293b; border-radius:8px; margin-bottom:10px;">
+  <span id="moveCount">0</span> selected | 
+  <input type="text" id="targetFolderInput" placeholder="Folder name (e.g. Highlights)" style="padding:6px; border-radius:4px; border:1px solid #334155; background:#0f172a; color:white;">
+  <button id="btnMove" style="padding:6px 12px; background:#3b82f6; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">📁 Move Selected</button>
+</div>
+
+  <!-- Merge Toolbar -->
+  <div id="mergeToolbar" class="merge-toolbar" style="display:none;">
+    <div class="merge-header">
+      <div>
+        <div class="merge-title">🎬 Merge Interrupted Streams</div>
+        <div class="merge-subtitle">
+          Select 2+ videos below in order. They'll be stitched together seamlessly.
+        </div>
+      </div>
+      <div style="font-size:13px;color:#ef4444;font-weight:600;">
+        <span id="selectedCount">0</span> selected
+      </div>
+    </div>
+    
+    <div class="merge-options">
+      <label class="checkbox-label">
+        <input type="checkbox" id="optGenerateThumb" checked>
+        <span>Generate thumbnail</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="optDeleteOriginals">
+        <span>Delete originals after merge</span>
+      </label>
+    </div>
+    
+    <div class="merge-controls">
+      <input
+        id="mergeOutputName"
+        type="text"
+        class="rename-input"
+        style="max-width:300px;"
+        placeholder="Output name (optional, without .mp4)"
+      />
+      <button
+        id="btnMerge"
+        class="btn-rename"
+        disabled
+      >
+        Merge Selected
+      </button>
+      <button
+        id="btnClear"
+        class="btn-rename"
+        style="background:#64748b;"
+      >
+        Clear
+      </button>
+    </div>
+    
+    <div class="progress-bar" id="progressBar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-text" id="progressText"></div>
+    
+    <div id="mergeStatus" style="margin-top:12px;min-height:20px;"></div>
+  </div>
+
+  <div id="loading" class="loading">Loading files...</div>
+  <div id="fileList" class="file-list" style="display:none;"></div>
+</div>
+<script>
+  console.log("🔥 inline test script ran");
+</script>
+<script src="/socket.io/socket.io.js"></script>
+<script src="/admin.js"></script>
+</body>
+</html>

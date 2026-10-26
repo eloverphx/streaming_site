@@ -1,0 +1,111 @@
+
+# Credentials and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Generated application files
+.next/
+dist/
+build/
+coverage/
+.cache/
+
+# Logs and temporary data
+*.log
+tmp/
+temp/
+
+# Databases and runtime state
+*.sqlite
+*.sqlite3
+*.db
+mysql/
+postgres/
+
+# Large video files
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+*.m4v
+*.mpeg
+*.mpg
+*.ts
+
+# Dependencies
+node_modules/
+
+# Credentials
+.env
+.env.*
+!.env.example
+
+# Private keys
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Logs
+*.log
+
+# Temporary and build files
+.next/
+dist/
+build/
+coverage/
+
+# Runtime databases
+*.sqlite
+*.sqlite3
+*.db
+
+# CrashTheNet large video storage
+/public/videos/
+/public/videos backup/
+
+# User-uploaded media
+/public/uploads/
+
+# Video formats anywhere in the project
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+*.m4v
+*.mpeg
+*.mpg
+*.ts
+
+# Dependencies
+node_modules/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Runtime and generated files
+*.log
+.next/
+dist/
+build/
+coverage/
+*.sqlite
+*.sqlite3
+*.db

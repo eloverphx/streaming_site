@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CrashTheNet — Past Videos</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg:#071029; --card:#081724; --muted:#9fb0c6; --accent:#ef4444;
+    font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial;
+  }
+  html, body {height:100%; margin:0; background:linear-gradient(180deg,#051226 0%, #061423 100%); color:#e6eef8;}
+  .container{max-width:1200px;margin:18px auto;padding:18px;box-sizing:border-box;}
+  header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;}
+  h1{font-size:20px;margin:0;}
+  a.btn{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#e6eef8;padding:8px 12px;border-radius:8px;font-size:13px;text-decoration:none;}
+  a.btn:hover{background:rgba(255,255,255,0.1);}
+  .grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;}
+  .card{background:var(--card);border:1px solid rgba(255,255,255,0.06);border-radius:10px;overflow:hidden;cursor:pointer;transition:transform .12s, box-shadow .12s;}
+  .card:hover{transform:translateY(-6px);box-shadow:0 10px 30px rgba(2,6,23,0.6);}
+  .thumb{width:100%;aspect-ratio:16/9;background:center/cover no-repeat #07122b;}
+  .meta{padding:10px;}
+  .title{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .sub{font-size:12px;color:var(--muted);margin-top:4px;}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:none;align-items:center;justify-content:center;padding:16px;z-index:1000;}
+  .modal-inner{background:#0b1322;border:1px solid rgba(255,255,255,0.06);border-radius:12px;max-width:960px;width:100%;padding:12px;box-shadow:0 10px 40px rgba(0,0,0,0.6);}
+  .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .modal-header h2{font-size:16px;margin:0;}
+  .close-btn{background:#334155;border:0;color:#fff;border-radius:6px;padding:6px 10px;cursor:pointer;}
+  .close-btn:hover{background:#1f2937;}
+  video{width:100%;height:auto;background:black;border-radius:8px;}
+  @media(max-width:1200px){.grid{grid-template-columns:repeat(4,1fr);}}
+  @media(max-width:800px){.grid{grid-template-columns:repeat(2,1fr);}}
+  @media(max-width:520px){.grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Past Videos</h1>
+    <div style="display:flex;gap:10px;align-items:center">
+      <a class="btn" href="/">⬅ Back to Live</a>
+      <a class="btn" href="/health.html" target="_blank">Health</a>
+    </div>
+  </header>
+
+  <section id="content">
+    <div id="lastUpdated" style="margin:0 0 8px;font-size:11px;color:var(--muted);min-height:1em;"></div>
+    <div id="empty" style="display:none;color:var(--muted);font-size:14px">
+      No videos found yet. When recordings finish downloading, they'll appear here.
+    </div>
+    <div class="grid" id="grid"></div>
+  </section>
+</div>
+
+<!-- Modal Player -->
+<div class="modal" id="modal">
+  <div class="modal-inner">
+    <div class="modal-header">
+      <h2 id="modalTitle">Playback</h2>
+      <button class="close-btn" id="closeModal">Close</button>
+    </div>
+    <video id="modalPlayer" controls playsinline></video>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.0/dist/hls.min.js"></script>
+<script>
+const grid = document.getElementById('grid');
+const empty = document.getElementById('empty');
+const modal = document.getElementById('modal');
+const modalTitle = document.getElementById('modalTitle');
+const modalPlayer = document.getElementById('modalPlayer');
+const closeModal = document.getElementById('closeModal');
+const lastUpdated = document.getElementById('lastUpdated');
+
+async function loadVideos() {
+  try {
+    const res = await fetch('/api/videos');
+    if (!res.ok) throw new Error('Failed to fetch video list');
+    const videos = await res.json();
+
+    // Sort videos by title (timestamp) in descending order (newest first)
+    videos.sort((a, b) => {
+      // Extract timestamps from filenames (if applicable)
+      const timeA = new Date(a.title.split('.')[0]).getTime();
+      const timeB = new Date(b.title.split('.')[0]).getTime();
+      return timeB - timeA; // Newest first
+    });
+
+    lastUpdated.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+
+    grid.innerHTML = '';
+    if (!videos.length) {
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+
+    videos.forEach(v => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <div class="thumb" style="background-image:url('${v.thumb || ''}');"></div>
+        <div class="meta">
+          <div class="title" title="${v.title}">${v.title}</div>
+          <div class="sub">${v.ext.toUpperCase()}</div>
+        </div>
+      `;
+      card.onclick = () => openPlayer(v);
+      grid.appendChild(card);
+    });
+  } catch (err) {
+    console.error(err);
+    empty.style.display = 'block';
+    empty.textContent = 'Error loading videos.';
+  }
+}
+
+function openPlayer(v) {
+  if (window._hls) { window._hls.destroy(); window._hls = null; }
+  modalTitle.textContent = v.title;
+  modal.style.display = 'flex';
+  
+  if (v.src.endsWith('.m3u8')) {
+    if (Hls.isSupported()) {
+      const hls = new Hls();
+      window._hls = hls;
+      hls.attachMedia(modalPlayer);
+      hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(v.src));
+    } else {
+      modalPlayer.src = v.src;
+    }
+  } else {
+    modalPlayer.src = v.src;
+  }
+  modalPlayer.play().catch(()=>{});
+}
+
+function closePlayer() {
+  modal.style.display = 'none';
+  modalPlayer.pause();
+  modalPlayer.removeAttribute('src');
+  modalPlayer.load();
+  if (window._hls) { window._hls.destroy(); window._hls = null; }
+}
+
+closeModal.onclick = closePlayer;
+modal.addEventListener('click', e => { if(e.target === modal) closePlayer(); });
+
+// Initial load & auto-refresh
+loadVideos();
+setInterval(loadVideos, 60000);
+</script>
+<footer style="text-align:center;padding:40px 20px;color:#9fb0c6;font-size:12px;">
+  © 2024 CrashTheNet • <a href="/admin" style="color:#22c55e;text-decoration:none;">Admin</a>
+</footer>
+</body>
+</html>
